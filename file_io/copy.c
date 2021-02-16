@@ -57,9 +57,9 @@ int main(int argc, const char *argv[])
         error_exitFailure(true, "Failed Opening Output File: %s\n", argv[2]);
     
     /*** Copy Contents Of Input File To Output File ***/
-    while((numRead = read(fdInput, buffer, sizeof(buffer))) > 0)
+    while((numRead = read(fdInput, buffer, sizeof(buffer))) > 0)  // read Changes File Offset; Use pread To Not Modify File Offset
     {
-        if(write(fdOutput, buffer, (size_t)numRead) != numRead)
+        if(write(fdOutput, buffer, (size_t)numRead) != numRead) // write Changes File Offset; Use pwrite To Not Modify File Offset
             error_exitFailure(true, "Failed Writing Output File: %s\n", argv[2]);
             
     }
