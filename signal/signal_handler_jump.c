@@ -1,6 +1,6 @@
 /****************************************************************************************************
- * FILE:    nonreentrant.c
- * BRIEF:   Non-Reentrant Source File
+ * FILE:    signal_handler_jump.c
+ * BRIEF:   Signal Handler Jump Source File
  ****************************************************************************************************/
 
 /****************************************************************************************************
@@ -8,24 +8,23 @@
  ****************************************************************************************************/
 
 #include "error.h"
+#include <setjmp.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 
 /****************************************************************************************************
  * Constants And Variables
  ****************************************************************************************************/
 
-static char *nonreentrant_str2;
-static int nonreentrant_handled = 0;
+static sigjmp_buf senv;
 
 /****************************************************************************************************
  * Function Prototypes
  ****************************************************************************************************/
 
-static void nonreentrant_signalHandler(int signal);
+static void signalHandlerJump_signalHandler(int signal);
 
 /****************************************************************************************************
  * Function Definitions (Public)
@@ -40,52 +39,30 @@ static void nonreentrant_signalHandler(int signal);
  ****************************************************************************************************/
 int main(int argc, char *argv[])
 {
-    char *encryptedString;
-    int callNum = 0, mismatch = 0;
+    static bool first = true;
     struct sigaction sa;
-
-    /*** Check Input ***/
-    if(argc != 3)
-        error_exitFailure(false, "Usage: %s [str1] [str2]\n", argv[0]);
-    
-    /*** Encrypt argv[1] ***/
-    encryptedString = strdup(crypt(argv[1], "xx"));
-    if(encryptedString == NULL)
-        error_exitFailure(true, "crypt Failed\n");
-    
-    /*** Make argv[2] Available To Signal Handler ***/
-    nonreentrant_str2 = argv[2];
     
     /*** Set New Signal Handler ***/
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
-    sa.sa_handler = nonreentrant_signalHandler;
+    sa.sa_handler = signalHandlerJump_signalHandler;
     if(sigaction(SIGINT, &sa, NULL) == -1)
         error_exitFailure(true, "sigaction Failed\n");
     
+    /*** Set Jump ***/
+    if(sigsetjmp(senv, 1) == 0)
+        printf("Set Jump\n");
+    else
+        printf("Jumped From Signal Handler\n");
+    
     /*** Infinite Loop ***/
-    /* Repeatedly Call crypt() Using argv[1].  If Interrupted By Signal Handler, Then The   */
-    /* Static Storage Returned By crypt()Will Be Overwritten By The Results Of Encrypting   */
-    /* argv[2] And strcmp() Will Detect A Mismatch Between The Actual And Expected Results. */
-    printf("Press Ctrl + C To Test; Press Ctrl + \\ To Quit\n");
-    while(1)
+    if(first)
     {
-        /* Increment Counter */
-        callNum++;
-        
-        /* Encrypt argv[1]; Compare To Expected Result */
-        if(strcmp(crypt(argv[1], "xx"), encryptedString) != 0) // argv[1] (Key); "xx" (Salt)
-        {
-            /* Increment Counter */
-            mismatch++;
-            
-            /* Print Status */
-            printf("Status:\n");
-            printf("  Call Number: %d\n", callNum);
-            printf("  Mismatch: %d\n", mismatch);
-            printf("  Handled: %d\n", nonreentrant_handled);
-        }
+        printf("Press Ctrl + C To Test; Press Ctrl + \\ To Quit\n");
+        first = false;
     }
+    while(1)
+        continue;
     
     exit(EXIT_SUCCESS);
 }
@@ -95,18 +72,16 @@ int main(int argc, char *argv[])
  ****************************************************************************************************/
 
 /****************************************************************************************************
- * FUNCT:   nonreentrant_signalHandler
+ * FUNCT:   signalHandlerJump_signalHandler
  * BRIEF:   Signal Handler
  * RETURN:  void: Returns Nothing
  * ARG:     signal: Signal
- * NOTE:    This Signal Handler Uses Non-Asynchronous Signal-Safe Function (printf, crypt)
+ * NOTE:    This Signal Handler Uses Non-Asynchronous Signal-Safe Function (printf)
  ****************************************************************************************************/
-static void nonreentrant_signalHandler(int signal)
+static void signalHandlerJump_signalHandler(int signal)
 {
-    /*** Encrypt nonreentrant_str2 (argv[2]) ***/
+    /*** Perform Jump ***/
     printf("\b\b  \b\b");
     fflush(stdout);
-    (void)crypt(nonreentrant_str2, "xx"); // nonreentrant_str2 (Key); "xx" (Salt)
-    nonreentrant_handled++;
+    siglongjmp(senv, 1);
 }
-
